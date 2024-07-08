@@ -9,7 +9,7 @@ def random_date(start_date, end_date):
     return start_date + timedelta(days=random_days)
 
 # Conecta ao banco de dados
-conn = sqlite3.connect("database.db")
+conn = sqlite3.connect("database1.db")
 cursor = conn.cursor()
 
 # Cria a tabela se não existir

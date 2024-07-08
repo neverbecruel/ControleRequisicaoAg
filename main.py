@@ -1,9 +1,8 @@
 import os
-
 from PyQt6.QtCore import Qt, QDate
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, QLineEdit, QPushButton, QWidget, QGridLayout,
-    QComboBox, QDateEdit, QMessageBox, QTabWidget
+    QComboBox, QDateEdit ,QHeaderView, QMessageBox, QTabWidget, QDialog, QLabel, QDialogButtonBox, QTableWidget, QTableWidgetItem
 )
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
@@ -11,10 +10,105 @@ import sys
 import sqlite3
 from collections import defaultdict
 
+home_dir = os.path.expanduser("~")
+data_dir = os.path.join(home_dir, "data")
+os.makedirs(data_dir, exist_ok=True)
+database = os.path.join(data_dir, "database.db")
+#database = "database1.db"
+
+class PasswordDialog(QDialog):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("Senha Necessária")
+        self.setFixedSize(300, 100)
+
+        self.layout = QVBoxLayout()
+        self.label = QLabel("Digite a senha para continuar:", self)
+        self.layout.addWidget(self.label)
+
+        self.password_input = QLineEdit(self)
+        self.password_input.setEchoMode(QLineEdit.EchoMode.Password)
+        self.layout.addWidget(self.password_input)
+
+        self.buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel, self)
+        self.buttons.accepted.connect(self.accept)
+        self.buttons.rejected.connect(self.reject)
+        self.layout.addWidget(self.buttons)
+
+        self.setLayout(self.layout)
+
+    def get_password(self):
+        return self.password_input.text()
+
+class DeleteEntryDialog(QDialog):
+    def __init__(self, databasePath):
+        super().__init__()
+        self.databasePath = databasePath
+        self.setWindowTitle("Excluir Inserção")
+        self.setFixedSize(445, 400)
+
+        self.layout = QVBoxLayout()
+        self.table = QTableWidget(self)
+        self.layout.addWidget(self.table)
+
+        self.buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel, self)
+        self.buttons.accepted.connect(self.close)
+        self.buttons.rejected.connect(self.reject)
+        self.layout.addWidget(self.buttons)
+
+        self.setLayout(self.layout)
+        self.load_entries()
+
+    def load_entries(self):
+        try:
+            conn = sqlite3.connect(self.databasePath)
+            cursor = conn.cursor()
+            cursor.execute("SELECT id, quantidade, tipo, talao, date(data) FROM requisicoes ORDER BY id DESC LIMIT 10")
+            rows = cursor.fetchall()
+            conn.close()
+
+            self.table.setRowCount(len(rows))
+            self.table.setColumnCount(5)
+            self.table.setHorizontalHeaderLabels(["ID", "Quantidade", "Tipo", "Talão", "Data"])
+
+            header = self.table.horizontalHeader()
+            header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+            header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+            header.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+            header.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
+            header.setSectionResizeMode(4, QHeaderView.ResizeMode.Fixed)
+            header.resizeSection(4, 130)
+
+            for row_idx, row in enumerate(rows):
+                for col_idx, col in enumerate(row):
+                    item = QTableWidgetItem(str(col))
+                    if col_idx == 4:  # Coluna de data
+                        item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)  # Alinhar o texto ao centro
+                    self.table.setItem(row_idx, col_idx, item)
+        except sqlite3.Error as e:
+            QMessageBox.critical(self, "ERRO", f"Erro ao carregar as entradas: {e}")
+
+    def delete_entry(self):
+        selected_items = self.table.selectedItems()
+        if selected_items:
+            entry_id = selected_items[0].text()
+            try:
+                conn = sqlite3.connect(self.databasePath)
+                cursor = conn.cursor()
+                cursor.execute("DELETE FROM requisicoes WHERE id = ?", (entry_id,))
+                conn.commit()
+                conn.close()
+                QMessageBox.information(self, "Sucesso", "Entrada excluída com sucesso")
+                self.load_entries()
+            except sqlite3.Error as e:
+                QMessageBox.critical(self, "ERRO", f"Erro ao excluir a entrada: {e}")
+        else:
+            QMessageBox.warning(self, "Aviso", "Nenhuma entrada selecionada para exclusão.")
 
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
+        self.databasePath = database
         self.setWindowTitle("Controle de requisição de agulhas")
         self.setFixedSize(1000, 500)
         self.center_window()
@@ -48,7 +142,7 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(self.grozbeckert_tab, "Visualização do Gráfico - Groz-Beckert")
 
         # Plot the initial data if the database exists
-        if os.path.exists("database.db"):
+        if os.path.exists(self.databasePath):
             self.neetex_plot_widget.plot()
             self.grozbeckert_plot_widget.plot()
 
@@ -93,6 +187,12 @@ class MainWindow(QMainWindow):
         self.novaReq_bt.clicked.connect(self.insert_data)
         self.input_form_layout.addWidget(self.novaReq_bt)
 
+        # Delete last entry button
+        self.delLastReq_bt = QPushButton("DELETAR", self)
+        self.delLastReq_bt.setFixedSize(100, 30)
+        self.delLastReq_bt.clicked.connect(self.confirm_delete_entry)
+        self.input_form_layout.addWidget(self.delLastReq_bt)
+
         self.input_layout.addLayout(self.input_form_layout)
 
     def create_plot_tab(self, layout, tipo_agulha):
@@ -124,7 +224,7 @@ class MainWindow(QMainWindow):
             return
         else:
             try:
-                conn = sqlite3.connect("database.db")
+                conn = sqlite3.connect(self.databasePath)
                 cursor = conn.cursor()
                 cursor.execute("CREATE TABLE IF NOT EXISTS requisicoes (id INTEGER PRIMARY KEY, quantidade INTEGER, tipo TEXT, data DATE, talao TEXT)")
                 cursor.execute("INSERT INTO requisicoes (quantidade, tipo, talao, data) VALUES (?,?,?,?)", (quantity, type, talao, data))
@@ -150,9 +250,20 @@ class MainWindow(QMainWindow):
             return
         plot_widget.plot(interval=interval)
 
+    def confirm_delete_entry(self):
+        password_dialog = PasswordDialog()
+        if password_dialog.exec() == QDialog.DialogCode.Accepted:
+            if password_dialog.get_password() == "1220":
+                delete_dialog = DeleteEntryDialog(self.databasePath)
+                if delete_dialog.exec() == QDialog.DialogCode.Accepted:
+                    self.neetex_plot_widget.plot()
+                    self.grozbeckert_plot_widget.plot()
+            else:
+                QMessageBox.warning(self, "Aviso", "Senha incorreta.")
 
 class PlotCanvas(FigureCanvas):
     def __init__(self, parent=None, width=5, height=4, dpi=100, tipo_agulha=None):
+        self.databasePath = database
         self.tipo_agulha = tipo_agulha
         self.fig = Figure(figsize=(width, height), dpi=dpi)
         self.axes = self.fig.add_subplot(111)
@@ -161,10 +272,10 @@ class PlotCanvas(FigureCanvas):
         self.plot()
 
     def plot(self, interval='yearly'):
-        if not os.path.exists("database.db"):
+        if not os.path.exists(self.databasePath):
             return
 
-        conn = sqlite3.connect("database.db")
+        conn = sqlite3.connect(self.databasePath)
         cursor = conn.cursor()
 
         # Seleciona os dados do banco de dados
@@ -205,7 +316,13 @@ class PlotCanvas(FigureCanvas):
                 datas.append(quantidade)
 
         x = range(len(labels))
-        width = 0.35
+
+        # Limitar a largura máxima das barras
+        max_width = 0.35 # Largura máxima desejada para as barras (proporcional ao número de barras)
+        if len(labels) == 1:
+            width = min(max_width, max_width / len(labels))  # Ajuste o valor conforme necessário
+        else:
+            width = max_width
 
         self.axes.clear()
         self.axes.bar(x, datas, width, label=self.tipo_agulha, color='steelblue' if self.tipo_agulha == 'Groz-Beckert' else 'orange')
@@ -216,11 +333,7 @@ class PlotCanvas(FigureCanvas):
         self.axes.set_ylabel('Quantidade')
         self.axes.set_title(f'Quantidade de Requisições ao Longo do Tempo - {self.tipo_agulha}', fontsize=14)
 
-        self.axes.legend(fontsize=10, loc='upper right', facecolor='lightgray', title='Tipo',
-                         title_fontsize='medium', shadow=True, fancybox=True, edgecolor='black', handletextpad=1,
-                         labelspacing=1, handlelength=2, handleheight=0.5, ncol=1, borderaxespad=0.5, columnspacing=0.5)
         self.draw()
-
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
