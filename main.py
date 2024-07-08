@@ -1,8 +1,9 @@
 import os
 from PyQt6.QtCore import Qt, QDate
 from PyQt6.QtWidgets import (
-    QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, QLineEdit, QPushButton, QWidget, QGridLayout,
-    QComboBox, QDateEdit ,QHeaderView, QMessageBox, QTabWidget, QDialog, QLabel, QDialogButtonBox, QTableWidget, QTableWidgetItem
+    QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, QLineEdit, QPushButton, QWidget,
+    QComboBox, QDateEdit, QHeaderView, QMessageBox, QTabWidget, QDialog, QLabel, QDialogButtonBox, QTableWidget,
+    QTableWidgetItem
 )
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
@@ -14,7 +15,10 @@ home_dir = os.path.expanduser("~")
 data_dir = os.path.join(home_dir, "data")
 os.makedirs(data_dir, exist_ok=True)
 database = os.path.join(data_dir, "database.db")
-#database = "database1.db"
+
+
+# database = "database1.db"
+
 
 class PasswordDialog(QDialog):
     def __init__(self):
@@ -30,7 +34,8 @@ class PasswordDialog(QDialog):
         self.password_input.setEchoMode(QLineEdit.EchoMode.Password)
         self.layout.addWidget(self.password_input)
 
-        self.buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel, self)
+        self.buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel,
+                                        self)
         self.buttons.accepted.connect(self.accept)
         self.buttons.rejected.connect(self.reject)
         self.layout.addWidget(self.buttons)
@@ -40,10 +45,11 @@ class PasswordDialog(QDialog):
     def get_password(self):
         return self.password_input.text()
 
+
 class DeleteEntryDialog(QDialog):
-    def __init__(self, databasePath):
+    def __init__(self, databasepath):
         super().__init__()
-        self.databasePath = databasePath
+        self.databasePath = databasepath
         self.setWindowTitle("Excluir Inserção")
         self.setFixedSize(445, 400)
 
@@ -51,7 +57,8 @@ class DeleteEntryDialog(QDialog):
         self.table = QTableWidget(self)
         self.layout.addWidget(self.table)
 
-        self.buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel, self)
+        self.buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel,
+                                        self)
         self.buttons.accepted.connect(self.close)
         self.buttons.rejected.connect(self.reject)
         self.layout.addWidget(self.buttons)
@@ -104,6 +111,7 @@ class DeleteEntryDialog(QDialog):
                 QMessageBox.critical(self, "ERRO", f"Erro ao excluir a entrada: {e}")
         else:
             QMessageBox.warning(self, "Aviso", "Nenhuma entrada selecionada para exclusão.")
+
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -214,7 +222,7 @@ class MainWindow(QMainWindow):
             self.grozbeckert_plot_widget = plot_widget
 
     def insert_data(self):
-        quantity = self.numAg_input.text()
+        quantity: str = self.numAg_input.text()
         type = self.tipoAg_input.currentText()
         talao = self.talaoAg_input.currentText()
         data = self.data_input.date().toString("yyyy-MM-dd")
@@ -226,8 +234,14 @@ class MainWindow(QMainWindow):
             try:
                 conn = sqlite3.connect(self.databasePath)
                 cursor = conn.cursor()
-                cursor.execute("CREATE TABLE IF NOT EXISTS requisicoes (id INTEGER PRIMARY KEY, quantidade INTEGER, tipo TEXT, data DATE, talao TEXT)")
-                cursor.execute("INSERT INTO requisicoes (quantidade, tipo, talao, data) VALUES (?,?,?,?)", (quantity, type, talao, data))
+                cursor.execute("CREATE TABLE IF NOT EXISTS requisicoes ("
+                               "id INTEGER PRIMARY KEY,"
+                               " quantidade INTEGER,"
+                               " tipo TEXT,"
+                               " data DATE,"
+                               " talao TEXT)")
+                cursor.execute("INSERT INTO requisicoes (quantidade, tipo, talao, data) VALUES (?,?,?,?)",
+                               (quantity, type, talao, data))
                 conn.commit()
                 QMessageBox.information(self, "Sucesso", "Dados inseridos no banco de dados")
                 self.numAg_input.clear()
@@ -240,7 +254,8 @@ class MainWindow(QMainWindow):
             finally:
                 conn.close()
 
-    def update_plot(self, tipo_agulha, plot_widget, filter_combo_box):
+    @staticmethod
+    def update_plot(plot_widget, filter_combo_box):
         interval = filter_combo_box.currentIndex()
         if interval == 0:
             interval = 'yearly'
@@ -260,6 +275,7 @@ class MainWindow(QMainWindow):
                     self.grozbeckert_plot_widget.plot()
             else:
                 QMessageBox.warning(self, "Aviso", "Senha incorreta.")
+
 
 class PlotCanvas(FigureCanvas):
     def __init__(self, parent=None, width=5, height=4, dpi=100, tipo_agulha=None):
@@ -318,14 +334,15 @@ class PlotCanvas(FigureCanvas):
         x = range(len(labels))
 
         # Limitar a largura máxima das barras
-        max_width = 0.35 # Largura máxima desejada para as barras (proporcional ao número de barras)
+        max_width = 0.35  # Largura máxima desejada para as barras (proporcional ao número de barras)
         if len(labels) == 1:
             width = min(max_width, max_width / len(labels))  # Ajuste o valor conforme necessário
         else:
             width = max_width
 
         self.axes.clear()
-        self.axes.bar(x, datas, width, label=self.tipo_agulha, color='steelblue' if self.tipo_agulha == 'Groz-Beckert' else 'orange')
+        self.axes.bar(x, datas, width, label=self.tipo_agulha,
+                      color='steelblue' if self.tipo_agulha == 'Groz-Beckert' else 'orange')
 
         self.axes.set_xticks(x)
         self.axes.set_xticklabels(labels)
@@ -334,6 +351,7 @@ class PlotCanvas(FigureCanvas):
         self.axes.set_title(f'Quantidade de Requisições ao Longo do Tempo - {self.tipo_agulha}', fontsize=14)
 
         self.draw()
+
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
